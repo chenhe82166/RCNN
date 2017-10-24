@@ -123,3 +123,5 @@ if __name__ == '__main__':
       if np.max(predicted) == predicted[0][i]:
         print("经预测，该图片为第%d类花" % i)
 
+
+
