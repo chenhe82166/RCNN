@@ -1,63 +1,83 @@
 from __future__ import division, print_function, absolute_import
 import pickle
-import numpy as np 
-import config
+import numpy as np
+from PIL import Image
 import os.path
-import codecs
+
 import tflearn
 from tflearn.layers.core import input_data, dropout, fully_connected
 from tflearn.layers.conv import conv_2d, max_pool_2d
 from tflearn.layers.normalization import local_response_normalization
 from tflearn.layers.estimator import regression
-import preprocessing_RCNN as prep
-import cv2
 
 
-def load_data(datafile, num_class, save=False, save_path='dataset.pkl'):
-    fr = codecs.open(datafile, 'r', 'utf-8')
-    train_list = fr.readlines()
+def load_image(img_path):
+    img = Image.open(img_path)
+    return img
+
+
+def resize_image(in_image, new_width, new_height, out_image=None,
+                 resize_mode=Image.ANTIALIAS):
+    img = in_image.resize((new_width, new_height), resize_mode)
+    if out_image:
+        img.save(out_image)
+    return img
+
+
+def pil_to_nparray(pil_image):
+    pil_image.load()
+    return np.asarray(pil_image, dtype="float32")
+
+
+def load_data(datafile, num_clss, save=True, save_path='dataset.pkl'):
+    train_list = open(datafile,'r')
     labels = []
     images = []
     for line in train_list:
+        # tmp0 = image address
+        # tmp1 = label
         tmp = line.strip().split(' ')
         fpath = tmp[0]
-        img = cv2.imread(fpath)
-        img = prep.resize_image(img, config.IMAGE_SIZE, config.IMAGE_SIZE)
-        np_img = np.asarray(img, dtype="float32")
+        print(fpath)
+        img = load_image(fpath)
+        img = resize_image(img,224,224)
+        np_img = pil_to_nparray(img)
         images.append(np_img)
 
         index = int(tmp[1])
-        label = np.zeros(num_class)
+        label = np.zeros(num_clss)
         label[index] = 1
         labels.append(label)
     if save:
         pickle.dump((images, labels), open(save_path, 'wb'))
-    fr.close()
     return images, labels
+	#
 
 
 def load_from_pkl(dataset_file):
     X, Y = pickle.load(open(dataset_file, 'rb'))
     return X,Y
+	#
 
 
-# Building 'AlexNet'
+
 def create_alexnet(num_classes):
-    network = input_data(shape=[None, config.IMAGE_SIZE, config.IMAGE_SIZE, 3])
+    # Building 'AlexNet'
+    network = input_data(shape=[None, 224, 224, 3])
     network = conv_2d(network, 96, 11, strides=4, activation='relu')
     network = max_pool_2d(network, 3, strides=2)
     network = local_response_normalization(network)
-    network = conv_2d(network, 256, 5, activation='relu')
+    network = conv_2d(network, 128, 5, activation='relu')
     network = max_pool_2d(network, 3, strides=2)
-    network = local_response_normalization(network)
-    network = conv_2d(network, 384, 3, activation='relu')
-    network = conv_2d(network, 384, 3, activation='relu')
-    network = conv_2d(network, 256, 3, activation='relu')
-    network = max_pool_2d(network, 3, strides=2)
-    network = local_response_normalization(network)
-    network = fully_connected(network, 4096, activation='tanh')
-    network = dropout(network, 0.5)
-    network = fully_connected(network, 4096, activation='tanh')
+    #network = local_response_normalization(network)
+    #network = conv_2d(network, 384, 3, activation='relu')
+    #network = conv_2d(network, 384, 3, activation='relu')
+    #network = conv_2d(network, 256, 3, activation='relu')
+    #network = max_pool_2d(network, 3, strides=2)
+    #network = local_response_normalization(network)
+    #network = fully_connected(network, 512, activation='tanh')
+    #network = dropout(network, 0.5)
+    network = fully_connected(network, 512, activation='tanh')
     network = dropout(network, 0.5)
     network = fully_connected(network, num_classes, activation='softmax')
     network = regression(network, optimizer='momentum',
@@ -66,30 +86,40 @@ def create_alexnet(num_classes):
     return network
 
 
-def train(network, X, Y, save_model_path):
+def train(network, X, Y):
     # Training
     model = tflearn.DNN(network, checkpoint_path='model_alexnet',
                         max_checkpoints=1, tensorboard_verbose=2, tensorboard_dir='output')
-    if os.path.isfile(save_model_path + '.index'):
-        model.load(save_model_path)
-        print('load model...')
-    for _ in range(5):
-        model.fit(X, Y, n_epoch=1, validation_set=0.1, shuffle=True,
-                  show_metric=True, batch_size=64, snapshot_step=200,
-                  snapshot_epoch=False, run_id='alexnet_oxflowers17') # epoch = 1000
-        # Save the model
-        model.save(save_model_path)
-        print('save model...')
+    if os.path.isfile('model_save.model'):
+    	model.load('model_save.model')
+    model.fit(X, Y, n_epoch=200, validation_set=0.1, shuffle=True,
+              show_metric=True, batch_size=64, snapshot_step=200,
+              snapshot_epoch=False, run_id='alexnet_oxflowers17') # epoch = 1000 Start training (apply gradient descent algorithm)
+    # Save the model
+    model.save('model_save.model')
+	#
 
-
-def predict(network, modelfile, images):
+def predict(network, modelfile,images):
     model = tflearn.DNN(network)
     model.load(modelfile)
     return model.predict(images)
 
-
 if __name__ == '__main__':
-    X, Y = load_data(config.TRAIN_LIST, config.TRAIN_CLASS)
-    net = create_alexnet(config.TRAIN_CLASS)
-    train(net, X, Y, config.SAVE_MODEL_PATH)
+    #X, Y = load_data('train_list.txt', 17)
+    #X, Y = load_from_pkl('dataset.pkl')
+    #net = create_alexnet(17)
+    #train(net,X,Y)
+    class_number = 17
+    img_path = 'test-images/test3.jpg'
+    imgs = []
+    img = load_image(img_path)
+    img = resize_image(img, 224, 224)
+    imgs.append(pil_to_nparray(img))
+    net = create_alexnet(class_number)
+    predicted = predict(net, 'model_save.model', imgs)
+    print(predicted)
+    #print(np.amax(predicted))
+    for i in range(class_number):
+      if np.max(predicted) == predicted[0][i]:
+        print("经预测，该图片为第%d类花" % i)
 
