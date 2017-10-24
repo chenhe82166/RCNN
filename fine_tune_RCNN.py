@@ -76,3 +76,6 @@ if __name__ == '__main__':
     fine_tune_Alexnet(net,X,Y)
 
 
+
+
+
